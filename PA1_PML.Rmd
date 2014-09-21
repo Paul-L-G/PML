@@ -1,0 +1,58 @@
+---
+title: "Course Project: Writeup for Practical Machine Learning"
+subtitle: "Predicting how a barbell was lifted"
+output: html_document
+---
+ 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+ 
+After loading the data, a quick look at the content revealed many columns that has NA in every row or had blank data with occasional measurements that coincided with the "new_window" column containing "yes".  I decided to delete these rows and remove columns that contained all NAs.  I read in the file using na.string = c("NA","") so that the blank data could be extracted as NAs. Lastly, I took out columns 1 through 7 as they did not contain data that appeared necessary for training.  While I was thinking that the time data may be important as it progressed through a single barbell lift, it also occured to me that people would do the exercise at different speeds, making the data less valuable. I left the time data out of the training.
+ 
+```{r cache=TRUE}
+library(AppliedPredictiveModeling)
+library(caret)
+HARData <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+set.seed(1234)
+trainIndex = createDataPartition(y=HARData$classe, p = 0.80, list=FALSE)
+training = HARData[trainIndex,]
+crossV = HARData[-trainIndex,]
+ 
+subtraining = training[training$new_window == "no",]
+withdata <- sapply(subtraining, function(x) if (sum(is.na(x)) > 0) FALSE else TRUE)
+withdata[c(1:7)] <- FALSE
+subtraining <- subtraining[,withdata]
+```
+I put aside 20% of the taining dataset to be used for cross validation.
+ 
+
+I decided to use the random forest method to build the model.  I tried a few different values for ntree and settled on 20 as it gave me a great out of sample error rate and only took minutes to run.
+```{r cache=TRUE}
+modFit <- train(classe ~ .,data = subtraining, method = "rf", ntree = 20)
+pred <- predict(modFit,crossV)
+table(pred,crossV$classe)
+```
+Using the crossV test dataset for cross validation the random forest model made only a few mistakes in its predictions and I would expect model to perform simularly on test data.
+The diagonal in the table above shows the number of correct predictions.  Using this data, The out of sample error rate using the cross validation data set calculates to be only:
+```{r}
+paste(round((1 - sum(diag(table(pred,crossV$classe)))/sum(table(pred,crossV$classe)))*100, 3), " %")
+```
+ 
+ 
+ 
+Running the model on the test data resulted in 20 out of 20 correct predictions.
+```{r}
+HARTestData <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+predTest <- predict(modFit,HARTestData)
+ 
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+ 
+pml_write_files(predTest) 
+```
+ 
